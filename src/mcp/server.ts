@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,11 +9,20 @@ import { ContextSandbox, ToolShortlister, VariableRegistry } from '../core/index
 
 function safeWorkspacePath(workspaceRoot: string, relPath: string): string {
   if (!relPath || isAbsolute(relPath)) throw new Error(`path must be workspace-relative: ${relPath}`);
-  const realRoot = realpathSync(resolve(workspaceRoot));
-  const target = realpathSync(resolve(realRoot, relPath));
+  let realRoot: string;
+  let target: string;
+  try {
+    realRoot = realpathSync(resolve(workspaceRoot));
+    target = realpathSync(resolve(realRoot, relPath));
+  } catch {
+    throw new Error(`cannot resolve workspace-relative path: ${relPath}`);
+  }
   const rel = relative(realRoot, target);
   if (!rel || rel.startsWith('..') || rel.split(sep).includes('..')) {
     throw new Error(`path escapes workspace (symlink or traversal blocked): ${relPath}`);
+  }
+  if (!statSync(target).isFile()) {
+    throw new Error(`path is not a regular file: ${relPath}`);
   }
   return target;
 }
@@ -49,17 +58,25 @@ const tools = Object.freeze({
   vars_list: () => callHost('vars_list', []),
 });
 const logs = [];
-const ctx = vm.createContext({
-  tools,
-  console: Object.freeze({
-    log: (...xs) => { if (logs.length < 100) logs.push(xs.map((x) => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')); },
-  }),
-});
+const ctx = vm.createContext(
+  {
+    tools,
+    console: Object.freeze({
+      log: (...xs) => { if (logs.length < 100) logs.push(xs.map((x) => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')); },
+    }),
+  },
+  { codeGeneration: { strings: false, wasm: false } },
+);
 (async () => {
   try {
     const script = new vm.Script('(async () => {\\n' + workerData.code + '\\n})()', { filename: 'codemode-sandbox.mjs' });
     const raw = await script.runInContext(ctx);
-    const val = raw === undefined ? null : JSON.parse(JSON.stringify(raw));
+    let val = null;
+    if (raw !== undefined) {
+      const serialized = JSON.stringify(raw);
+      if (serialized === undefined) throw new Error('return value is not JSON-serializable');
+      val = JSON.parse(serialized);
+    }
     parentPort.postMessage({ type: 'done', ok: true, value: val, logs });
   } catch (err) {
     parentPort.postMessage({ type: 'done', ok: false, logs, error: err && err.message ? err.message : String(err) });

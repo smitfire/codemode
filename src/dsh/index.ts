@@ -17,15 +17,15 @@ export interface PluginConfig {
   maxInlineChars: number;
   shortlistingThreshold: number;
   maxActiveTools: number;
-  dbPath?: string;
+  dbPath: string;
 }
 
-export const Config: z<PluginConfig> = z.object({
+export const Config = z.object({
   maxInlineChars: z.number().default(8192),
   shortlistingThreshold: z.number().default(10),
   maxActiveTools: z.number().default(12),
-  dbPath: z.string(),
-}) as unknown as z<PluginConfig>;
+  dbPath: z.string().default(':memory:'),
+});
 
 export interface NsCodemodeService {
   readonly sandbox: ContextSandbox;
