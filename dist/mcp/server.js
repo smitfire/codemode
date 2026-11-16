@@ -10,9 +10,11 @@ function safeWorkspacePath(workspaceRoot, relPath) {
         throw new Error(`path must be workspace-relative: ${relPath}`);
     let realRoot;
     let target;
+    let isRegularFile = false;
     try {
         realRoot = realpathSync(resolve(workspaceRoot));
         target = realpathSync(resolve(realRoot, relPath));
+        isRegularFile = statSync(target).isFile();
     }
     catch {
         throw new Error(`cannot resolve workspace-relative path: ${relPath}`);
@@ -21,7 +23,7 @@ function safeWorkspacePath(workspaceRoot, relPath) {
     if (!rel || rel.startsWith('..') || rel.split(sep).includes('..')) {
         throw new Error(`path escapes workspace (symlink or traversal blocked): ${relPath}`);
     }
-    if (!statSync(target).isFile()) {
+    if (!isRegularFile) {
         throw new Error(`path is not a regular file: ${relPath}`);
     }
     return target;
