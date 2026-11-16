@@ -1,0 +1,6 @@
+# Replace DSH raw-file spilling with Code-Mode FTS5 ContextSandbox indexing.
+- id: spill-policy
+  disabled: true
+- insert:
+    - id: ns-codemode
+      name: '@smitfire/codemode'
